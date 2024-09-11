@@ -6,6 +6,134 @@
     <title>Informatika</title>
 </head>
 <body>
+    <h1> ESP32 </h1>h1>
+    <pre> #include <WiFi.h>
+#include <FirebaseESP32.h>
+#include <DHT.h>
+#include <EEPROM.h>
+#include "GravityTDS.h" 
+
+#define WIFI_SSID "CTAF Sukoharjo"
+#define WIFI_PASSWORD "Bintang#1"
+
+#define FIREBASE_HOST "ssft-shecu-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define FIREBASE_AUTH "AIzaSyDet2eKrHgcsNyOO5iF-nPbBviY5xQ1rh4"
+
+#define DHTPIN 2
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE, 6);
+
+const int waterLevelSensorPin = 34;
+const int soilMoistureSensorPin = 35;
+const int ldrPin = 33;
+const int TdsSensorPin = 32;
+
+FirebaseData firebaseData;
+FirebaseConfig firebaseConfig;
+FirebaseAuth firebaseAuth;
+
+GravityTDS gravityTds;
+float temperature = 25, tdsValue;
+
+IPAddress local_ip(192,168,1,100);
+IPAddress gateway(192,168,1,1);
+IPAddress subnet(255,255,255,0);
+
+void setup() {
+    Serial.begin(115200);
+    analogReadResolution(12);
+
+    // Set WiFi configuration
+    WiFi.config(local_ip, gateway, subnet);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.print("Connecting to WiFi");
+
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.print(".");
+    }
+
+    Serial.println("\nConnected to WiFi");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+
+    // Firebase initialization
+    firebaseConfig.host = FIREBASE_HOST;
+    firebaseConfig.signer.tokens.legacy_token = FIREBASE_AUTH;
+
+    Firebase.begin(&firebaseConfig, &firebaseAuth);
+    Firebase.reconnectWiFi(true);
+
+    while (!Firebase.ready()) {
+        Serial.println("Connecting to Firebase...");
+        delay(1000);
+    }
+    Serial.println("Connected to Firebase");
+
+    // Initialize sensors
+    dht.begin();
+    EEPROM.begin(512);
+    gravityTds.setPin(TdsSensorPin);
+    gravityTds.setAref(3.3);
+    gravityTds.setAdcRange(4096);
+    gravityTds.begin();
+}
+
+float getWaterLevelPercentage() {
+    int sensorValue = analogRead(waterLevelSensorPin);
+    float voltage = sensorValue * (3.3 / 4095.0);
+    return (voltage / 3.3) * 100.0;
+}
+
+float getSoilMoisturePercentage() {
+    int sensorValue = analogRead(soilMoistureSensorPin);
+    return (4095.0 - sensorValue) / 4095.0 * 100.0;
+}
+
+float getLDRPercentage() {
+    int sensorValue = analogRead(ldrPin);
+    return (1 - (sensorValue / 4095.0)) * 100.0;
+}
+
+void loop() {
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    float waterLevelPercentage = getWaterLevelPercentage();
+    float soilMoisturePercentage = getSoilMoisturePercentage();
+    float ldrPercentage = getLDRPercentage();
+
+    gravityTds.setTemperature(temperature);
+    gravityTds.update();
+    tdsValue = gravityTds.getTdsValue();
+
+    if (isnan(h) || isnan(t)) {
+        Serial.println("Failed to read from DHT sensor!");
+        return;
+    }
+
+    Serial.print("Temperature: "); Serial.print(t);
+    Serial.print(" *C, Humidity: "); Serial.print(h);
+    Serial.print(" %, Water Level: "); Serial.print(waterLevelPercentage);
+    Serial.print(" %, Soil Moisture: "); Serial.print(soilMoisturePercentage);
+    Serial.print(" %, LDR: "); Serial.print(ldrPercentage);
+    Serial.print(" %, TDS: "); Serial.print(tdsValue);
+    Serial.println(" ppm");
+
+    // Send data to Firebase
+    if (Firebase.setFloat(firebaseData, "/dht22/humidity", h) &&
+        Firebase.setFloat(firebaseData, "/dht22/temperature", t) &&
+        Firebase.setFloat(firebaseData, "/dht22/waterLevel", waterLevelPercentage) &&
+        Firebase.setFloat(firebaseData, "/dht22/soilMoisture", soilMoisturePercentage) &&
+        Firebase.setFloat(firebaseData, "/dht22/ldr", ldrPercentage) &&
+        Firebase.setFloat(firebaseData, "/dht22/tds", tdsValue)) {
+        Serial.println("Data successfully sent to Firebase.");
+    } else {
+        Serial.println("Failed to send data to Firebase!");
+        Serial.println(firebaseData.errorReason());
+    }
+} 
+</pre>
+
     
     <h1>Searching</h1>
     <pre>data = input(f"Masukkan daftar kata yang dipisahkan oleh spasi: ")
